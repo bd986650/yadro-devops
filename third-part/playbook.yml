@@ -1,0 +1,68 @@
+---
+- name: Docker automation (Linux server version)
+  hosts: all
+  become: yes
+
+  vars:
+    image_name: http-status-checker
+    container_name: http-checker
+    project_root: "{{ playbook_dir }}/.."
+
+  tasks:
+
+    - name: Update apt cache
+      apt:
+        update_cache: yes
+
+    - name: Install required packages
+      apt:
+        name:
+          - docker.io
+        state: present
+
+    - name: Enable and start Docker service
+      systemd:
+        name: docker
+        state: started
+        enabled: yes
+
+    - name: Add user to docker group
+      user:
+        name: "{{ ansible_user }}"
+        groups: docker
+        append: yes
+
+    - name: Check Docker version
+      command: docker --version
+
+    - name: Check Docker daemon
+      command: docker info
+
+    - name: Build Docker image
+      command: >
+        docker build
+        -f second-part/Dockerfile
+        -t {{ image_name }}
+        {{ project_root }}
+      args:
+        chdir: "{{ project_root }}"
+
+    - name: Remove old container (if exists)
+      command: docker rm -f {{ container_name }}
+      ignore_errors: yes
+
+    - name: Run container
+      command: docker run --name {{ container_name }} {{ image_name }}
+      register: run_result
+
+    - name: Show exit code
+      debug:
+        var: run_result.rc
+
+    - name: Get logs
+      command: docker logs {{ container_name }}
+      register: logs
+
+    - name: Print logs
+      debug:
+        var: logs.stdout
